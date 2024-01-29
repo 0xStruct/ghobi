@@ -1,4 +1,4 @@
-# Mina zkApp: 06 Offchain Storage
+# Mina zkApp: Challenge1
 
 This template uses TypeScript.
 
