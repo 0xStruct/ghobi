@@ -9,12 +9,14 @@ import {
   Struct,
   PublicKey,
   UInt64,
+  Bool,
   method,
   MerkleWitness,
   Signature,
   // MerkleMap,
   MerkleMapWitness,
-  Bytes,
+  Provable,
+  provablePure,
 } from 'o1js';
 
 let initialBalance = 10_000_000_000;
@@ -34,11 +36,18 @@ export class Challenge1 extends SmartContract {
   // eligibilityRoot is the root of the Merkle Tree
   @state(Field) eligibilityRoot = State<Field>();
 
-  // nullifiers are used to prevent double spending
-  @state(Field) nullifiers = State<Field>();
+  @state(Field) nullifierRoot = State<Field>();
 
-  // total supply of tokens
+  // total deposited messages
   @state(UInt64) totalMessages = State<UInt64>();
+
+  // contract events
+  events = {
+    depositMessage: provablePure({
+      depositer: String,
+      message: Field
+    }),
+  };
 
   deploy(args: DeployArgs) {
     super.deploy(args);
@@ -57,32 +66,6 @@ export class Challenge1 extends SmartContract {
     this.totalMessages.set(UInt64.zero);
   }
 
-  // token method
-  @method mint(
-    receiverAddress: PublicKey,
-    amount: UInt64,
-    adminSignature: Signature
-  ) {
-    let totalMessages = this.totalMessages.getAndRequireEquals();
-    let newTotalMessages = totalMessages.add(1);
-
-    console.log('verifying signature');
-    adminSignature
-      .verify(
-        this.address,
-        amount.toFields().concat(receiverAddress.toFields())
-      )
-      .assertTrue();
-    console.log('verified signature');
-
-    this.token.mint({
-      address: receiverAddress,
-      amount,
-    });
-    console.log('minted!');
-    this.totalMessages.set(newTotalMessages);
-  }
-
   // set initial merkle tree value
   @method
   setEligibilityRoot(root: Field) {
@@ -97,15 +80,18 @@ export class Challenge1 extends SmartContract {
     path.calculateRoot(account.hash()).assertEquals(eligibilityRoot);
   }
 
-  /// checks if an account has deposited, returns 0 if not deposited, 1 if deposited
+  // checks if an account has deposited, throw error if not deposited yet
   @method
-  checkDeposited(account: Account, mmWitness: MerkleMapWitness): Field {
+  checkDeposit(account: Account, nullifierWitness: MerkleMapWitness) {
     // ensure this account has not been deposited before
-    let nullifiers = this.nullifiers.getAndRequireEquals();
+    let nullifierRoot = this.nullifierRoot.getAndRequireEquals();
 
-    // eslint-disable-next-line no-unused-vars
-    const [rootBefore, key] = mmWitness.computeRootAndKey(Field(0));
-    return key;
+    // get root when key is set to Field(1) - meaning deposited
+    const [root, key] = nullifierWitness.computeRootAndKey(Field(1));
+    Provable.log("nullifierRoot", nullifierRoot, "root", root, "key", key);
+    
+    key.assertEquals(account.hash());
+    root.assertNotEquals(nullifierRoot);
   }
 
   @method
@@ -114,7 +100,7 @@ export class Challenge1 extends SmartContract {
     message: Field,
     path: MerkleWitnessInstance,
     signature: Signature,
-    mmWitness: MerkleMapWitness
+    nullifierWitness: MerkleMapWitness
   ) {
     // fetch the on-chain eligibilityRoot
     let eligibilityRoot = this.eligibilityRoot.getAndRequireEquals();
@@ -122,25 +108,37 @@ export class Challenge1 extends SmartContract {
     // check that the account is within the committed Merkle Tree
     path.calculateRoot(account.hash()).assertEquals(eligibilityRoot);
 
-    // ensure this account has not been deposited before
-    let _nullifiers = this.nullifiers.getAndRequireEquals();
-
-    // eslint-disable-next-line no-unused-vars
-    const [rootBefore, key] = mmWitness.computeRootAndKey(Field(0));
-    // console.log(" nullifier root is", rootBefore.toString())
-    key.assertEquals(Field(0));
-    // rootBefore.assertEquals(_nullifiers.getRoot());
+    // fetch the on-chain nullifierRoot
+    let nullifierRoot = this.nullifierRoot.getAndRequireEquals();
 
     // compute the root after setting nullifier flag
-    // eslint-disable-next-line no-unused-vars
-    const [rootAfter, _] = mmWitness.computeRootAndKey(Field(1));
+    const [rootAfterDeposit, key] = nullifierWitness.computeRootAndKey(Field(1));
 
-    // console.log("setting nullifier root to", rootAfter.toString())
+    // ensure this account has not been deposited before
+    nullifierRoot.assertNotEquals(rootAfterDeposit);
+    
+    Provable.log("rootAfterDeposit", rootAfterDeposit, "key", key);
+    Provable.log("setting nullifier root to", rootAfterDeposit);
 
     // set the new root
-    this.nullifiers.set(rootAfter);
+    this.nullifierRoot.set(rootAfterDeposit);
+    
+    // verify message
+    Provable.log("message:", message.toBits()[-6]);
 
-    // now send tokens to the account
-    // this.mint(account.publicKey, UInt64.one, signature);
+    //Provable.if(message.toBits()[-6] === Bool(true))
+
+    // now emit event with the message
+    this.emitEvent('depositMessage', {
+      depositer: account.publicKey,
+      message: message,
+    });
+
+    // update contract state
+    let totalMessages = this.totalMessages.getAndRequireEquals();
+    let newTotalMessages = totalMessages.add(1);
+    console.log('mesage deposited');
+    this.totalMessages.set(newTotalMessages);
+    
   }
 }

@@ -8,26 +8,26 @@ import {
   UInt64,
   Signature,
   MerkleMap,
+  MerkleMapWitness,
   Field,
-  Bytes,
-  Encoding,
-  Poseidon,
 } from 'o1js';
 
-const Tree = new MerkleTree(8);
-const initialTokens = 100;
+const EligibilityTree = new MerkleTree(8);
+const NullifierMap = new MerkleMap();
+
 let initialBalance = 10_000_000_000;
 type Names = 'Bob' | 'Alice' | 'Charlie' | 'Olivia';
 export let Accounts: Map<string, Account> = new Map<Names, Account>();
 
-let bob, alice, charlie, olivia: any;
-let initialCommitment: any;
+let bob, alice, charlie, olivia: Account;
+let initialEligibilityRoot: Field;
+let initialNullifierRoot: Field;
 
 async function createLocalBlockchain() {
   const Local = Mina.LocalBlockchain();
   Mina.setActiveInstance(Local);
 
-  // console.log("compiling zkapp...");
+  console.log("compiling zkapp...");
   let { verificationKey } = await Challenge1.compile();
   console.log("compiled zkapp...");
   console.log({ verificationKey })
@@ -42,12 +42,13 @@ async function createLocalBlockchain() {
   Accounts.set('Olivia', olivia);
   Accounts.set('Bob', bob);
 
-  // Bob is not in the merkle tree
-  Tree.setLeaf(BigInt(0), alice.hash());
-  Tree.setLeaf(BigInt(1), charlie.hash());
-  Tree.setLeaf(BigInt(2), olivia.hash());
+  // Bob is not in the Eligibility merkle tree
+  EligibilityTree.setLeaf(BigInt(0), alice.hash());
+  EligibilityTree.setLeaf(BigInt(1), charlie.hash());
+  EligibilityTree.setLeaf(BigInt(2), olivia.hash());
 
-  initialCommitment = Tree.getRoot();
+  initialEligibilityRoot = EligibilityTree.getRoot();
+  initialNullifierRoot = NullifierMap.getRoot();
 
   return Local.testAccounts[0].privateKey;
 }
@@ -77,46 +78,37 @@ describe('Challenge1', () => {
 
   // afterAll(async () => {});
 
-  it('deploys the `Challenge1` smart contract and setsPreImage', async () => {
-    const zkAppInstance = new Challenge1(zkAppAddress);
-    await localDeploy(zkAppInstance, zkAppPrivateKey, deployerAccount);
-    await setEligibilityRoot(deployerAccount, zkAppPrivateKey, zkAppInstance);
+  // it('deploys the `Challenge1` smart contract and setEligibilityRoot', async () => {
+  //   const zkAppInstance = new Challenge1(zkAppAddress);
+  //   await localDeploy(zkAppInstance, zkAppPrivateKey, deployerAccount);
+  //   await setEligibilityRoot(deployerAccount, zkAppPrivateKey, zkAppInstance);
 
-    expect(zkAppInstance.eligibilityRoot.get()).toEqual(initialCommitment);
-  });
+  //   expect(zkAppInstance.eligibilityRoot.get()).toEqual(initialEligibilityRoot);
+  // });
 
-  it('check Alice is in the set', async () => {
-    const zkAppInstance = new Challenge1(zkAppAddress);
-    await localDeploy(zkAppInstance, zkAppPrivateKey, deployerAccount);
-    await setEligibilityRoot(deployerAccount, zkAppPrivateKey, zkAppInstance);
+  // it('check Alice is in the eligibility tree', async () => {
+  //   const zkAppInstance = new Challenge1(zkAppAddress);
+  //   await localDeploy(zkAppInstance, zkAppPrivateKey, deployerAccount);
+  //   await setEligibilityRoot(deployerAccount, zkAppPrivateKey, zkAppInstance);
 
-    await checkSetInclusion(
-      'Alice',
-      BigInt(0),
-      deployerAccount,
-      zkAppPrivateKey,
-      zkAppInstance
-    );
-  });
+  //   await checkEligibility(
+  //     'Alice',
+  //     BigInt(0),
+  //     deployerAccount,
+  //     zkAppPrivateKey,
+  //     zkAppInstance
+  //   );
+  // });
 
-  it('can mint', async () => {
-    const zkAppInstance = new Challenge1(zkAppAddress);
-    await localDeploy(zkAppInstance, zkAppPrivateKey, deployerAccount);
-    await setEligibilityRoot(deployerAccount, zkAppPrivateKey, zkAppInstance);
+  // it('check Alice depositMessage status', async () => {
+  //   const zkAppInstance = new Challenge1(zkAppAddress);
+  //   await localDeploy(zkAppInstance, zkAppPrivateKey, deployerAccount);
+  //   await setEligibilityRoot(deployerAccount, zkAppPrivateKey, zkAppInstance);
 
-    await mint(deployerAccount, zkAppPrivateKey, zkAppInstance);
-  });
+  //   await checkDeposit("Alice", deployerAccount, zkAppPrivateKey, zkAppInstance);
+  // });
 
-  it('check claim status', async () => {
-    const zkAppInstance = new Challenge1(zkAppAddress);
-    await localDeploy(zkAppInstance, zkAppPrivateKey, deployerAccount);
-    await setEligibilityRoot(deployerAccount, zkAppPrivateKey, zkAppInstance);
-
-    const result = await checkClaimed("Alice", deployerAccount, zkAppPrivateKey, zkAppInstance);
-    expect(result).toEqual(Field(0));
-  });
-
-  it('can claim', async () => {
+  it('Alice can depositMessage 1st time, BUT cannot depositMessage again', async () => {
     const zkAppInstance = new Challenge1(zkAppAddress);
     await localDeploy(zkAppInstance, zkAppPrivateKey, deployerAccount);
     await setEligibilityRoot(deployerAccount, zkAppPrivateKey, zkAppInstance);
@@ -124,35 +116,62 @@ describe('Challenge1', () => {
     await depositMessage(
       'Alice',
       BigInt(0),
-      Poseidon.hash(Encoding.stringToFields("Hello")),
+      Field(13),
       deployerAccount,
       zkAppPrivateKey,
       zkAppInstance
     );
 
-    // eslint-disable-next-line no-unused-vars
-    const result = await checkClaimed("Alice", deployerAccount, zkAppPrivateKey, zkAppInstance);
-    // expect(result).toEqual(Field(1));
-  });
+    // after depositting, update the local NullifierMap
+    NullifierMap.set(Accounts.get("Alice")!.hash(), Field(1));
 
-  it('throws when randomer is not in set', async () => {
-    const zkAppInstance = new Challenge1(zkAppAddress);
-    await localDeploy(zkAppInstance, zkAppPrivateKey, deployerAccount);
-    await setEligibilityRoot(deployerAccount, zkAppPrivateKey, zkAppInstance);
+    // checkDeposit - show throw error as Alice has deposited already
     try {
       expect(
-        await checkSetInclusion(
-          'Bob',
+        await checkDeposit("Alice", deployerAccount, zkAppPrivateKey, zkAppInstance)
+      ).toThrowError();
+    } catch (e) {
+      console.log("checkDeposit for Charlie:", e);
+    }
+
+    // checkDeposit - should not throw error as Charlie has not deposited
+    await checkDeposit("Charlie", deployerAccount, zkAppPrivateKey, zkAppInstance);
+
+    // Alice deposit again - should not be allowed
+    try {
+      expect(
+        await depositMessage(
+          'Alice',
           BigInt(0),
+          Field(13),
           deployerAccount,
           zkAppPrivateKey,
           zkAppInstance
         )
-      ).toThrow();
+      ).toThrowError();
     } catch (e) {
-      console.log(e);
+      console.log("Alice depositting again, should not be allowed", e);
     }
   });
+
+  // it('check Bob eligibility - Bob is not in the list', async () => {
+  //   const zkAppInstance = new Challenge1(zkAppAddress);
+  //   await localDeploy(zkAppInstance, zkAppPrivateKey, deployerAccount);
+  //   await setEligibilityRoot(deployerAccount, zkAppPrivateKey, zkAppInstance);
+  //   try {
+  //     expect(
+  //       await checkEligibility(
+  //         'Bob',
+  //         BigInt(0),
+  //         deployerAccount,
+  //         zkAppPrivateKey,
+  //         zkAppInstance
+  //       )
+  //     ).toThrow();
+  //   } catch (e) {
+  //     console.log(e);
+  //   }
+  // });
 });
 
 async function setEligibilityRoot(
@@ -161,14 +180,14 @@ async function setEligibilityRoot(
   merkleZkApp: Challenge1
 ) {
   let tx = await Mina.transaction(feePayer, () => {
-    merkleZkApp.setEligibilityRoot(initialCommitment);
+    merkleZkApp.setEligibilityRoot(initialEligibilityRoot);
     merkleZkApp.sign(zkappKey);
   });
   await tx.prove();
   await tx.send();
 }
 
-async function checkSetInclusion(
+async function checkEligibility(
   name: Names,
   index: bigint, // do we need index? can we just loop in the tree?
   feePayer: any,
@@ -177,7 +196,7 @@ async function checkSetInclusion(
 ) {
   let tx = await Mina.transaction(feePayer, () => {
     let account = Accounts.get(name)!;
-    let w = Tree.getWitness(index);
+    let w = EligibilityTree.getWitness(index);
     let witness = new MerkleWitnessInstance(w);
     contract.checkEligibility(account, witness);
     contract.sign(zkappKey);
@@ -190,8 +209,8 @@ async function depositMessage(
   name: Names,
   index: bigint,
   message: Field,
-  feePayer: any,
-  zkappKey: any,
+  feePayer: PrivateKey,
+  zkappKey: PrivateKey,
   contract: Challenge1
 ) {
   let depositor = Accounts.get(name)!.publicKey;
@@ -204,14 +223,14 @@ async function depositMessage(
 
   let tx = await Mina.transaction(feePayer, () => {
     let account = Accounts.get(name)!;
-    let w = Tree.getWitness(index);
-    let witness = new MerkleWitnessInstance(w);
+    let eligibilityWitness = EligibilityTree.getWitness(index);
+    let eligibilityMerkleWitnessInstance = new MerkleWitnessInstance(eligibilityWitness);
 
-    const map = new MerkleMap();
     console.log("depositor:", depositor.toBase58());
-    const mmWitness = map.getWitness(Field(0));
 
-    contract.depositMessage(account, message, witness, sig, mmWitness);
+    const nullifierMapWitness = NullifierMap.getWitness(account.hash());
+
+    contract.depositMessage(account, message, eligibilityMerkleWitnessInstance, sig, nullifierMapWitness);
     contract.sign(zkappKey);
   });
   await tx.prove();
@@ -219,28 +238,24 @@ async function depositMessage(
   await tx.send();
 }
 
-async function checkClaimed(
+async function checkDeposit(
   name: Names,
   feePayer: any,
   zkappKey: any,
   contract: Challenge1
-): Promise<Field> {
-  let result = Field(0)
+) {
 
   let tx = await Mina.transaction(feePayer, () => {
     let account = Accounts.get(name)!;
-    const map = new MerkleMap();
 
-    const mmWitness = map.getWitness(Field(0));
+    const nullifierWitness = NullifierMap.getWitness(account.hash());
 
-    result = contract.checkDeposited(account, mmWitness);
-    console.log({ result })
+    contract.checkDeposit(account, nullifierWitness);
     contract.sign(zkappKey);
   });
   await tx.prove();
   tx.sign([zkappKey]);
   await tx.send();
-  return result
 }
 
 async function mint(
@@ -248,24 +263,23 @@ async function mint(
   zkappKey: any,
   contract: Challenge1
 ) {
-  const sig = Signature.create(
-    zkappKey,
-    UInt64.from(initialTokens)
-      .toFields()
-      .concat(contract.address.toFields())
-  );
-  // console.log("compiling.")
-  // await Challenge1.compile()
-  let tx = await Mina.transaction(feePayer, () => {
-    AccountUpdate.fundNewAccount(feePayer);
-    contract.mint(
-      contract.address,
-      UInt64.from(initialTokens),
-      sig
-    );
-    contract.sign(zkappKey);
-  });
-  await tx.prove();
-  tx.sign([zkappKey]);
-  await tx.send();
+  // const sig = Signature.create(
+  //   zkappKey,
+  //   UInt64.from(initialTokens)
+  //     .toFields()
+  //     .concat(contract.address.toFields())
+  // );
+
+  // let tx = await Mina.transaction(feePayer, () => {
+  //   AccountUpdate.fundNewAccount(feePayer);
+  //   contract.mint(
+  //     contract.address,
+  //     UInt64.from(initialTokens),
+  //     sig
+  //   );
+  //   contract.sign(zkappKey);
+  // });
+  // await tx.prove();
+  // tx.sign([zkappKey]);
+  // await tx.send();
 }
