@@ -10,6 +10,7 @@ import {
   MerkleMap,
   MerkleMapWitness,
   Field,
+  Bool,
 } from 'o1js';
 
 const EligibilityTree = new MerkleTree(8);
@@ -78,35 +79,35 @@ describe('Challenge1', () => {
 
   // afterAll(async () => {});
 
-  // it('deploys the `Challenge1` smart contract and setEligibilityRoot', async () => {
-  //   const zkAppInstance = new Challenge1(zkAppAddress);
-  //   await localDeploy(zkAppInstance, zkAppPrivateKey, deployerAccount);
-  //   await setEligibilityRoot(deployerAccount, zkAppPrivateKey, zkAppInstance);
+  it('deploys the `Challenge1` smart contract and setEligibilityRoot', async () => {
+    const zkAppInstance = new Challenge1(zkAppAddress);
+    await localDeploy(zkAppInstance, zkAppPrivateKey, deployerAccount);
+    await setEligibilityRoot(deployerAccount, zkAppPrivateKey, zkAppInstance);
 
-  //   expect(zkAppInstance.eligibilityRoot.get()).toEqual(initialEligibilityRoot);
-  // });
+    expect(zkAppInstance.eligibilityRoot.get()).toEqual(initialEligibilityRoot);
+  });
 
-  // it('check Alice is in the eligibility tree', async () => {
-  //   const zkAppInstance = new Challenge1(zkAppAddress);
-  //   await localDeploy(zkAppInstance, zkAppPrivateKey, deployerAccount);
-  //   await setEligibilityRoot(deployerAccount, zkAppPrivateKey, zkAppInstance);
+  it('check Alice is in the eligibility tree', async () => {
+    const zkAppInstance = new Challenge1(zkAppAddress);
+    await localDeploy(zkAppInstance, zkAppPrivateKey, deployerAccount);
+    await setEligibilityRoot(deployerAccount, zkAppPrivateKey, zkAppInstance);
 
-  //   await checkEligibility(
-  //     'Alice',
-  //     BigInt(0),
-  //     deployerAccount,
-  //     zkAppPrivateKey,
-  //     zkAppInstance
-  //   );
-  // });
+    await checkEligibility(
+      'Alice',
+      BigInt(0),
+      deployerAccount,
+      zkAppPrivateKey,
+      zkAppInstance
+    );
+  });
 
-  // it('check Alice depositMessage status', async () => {
-  //   const zkAppInstance = new Challenge1(zkAppAddress);
-  //   await localDeploy(zkAppInstance, zkAppPrivateKey, deployerAccount);
-  //   await setEligibilityRoot(deployerAccount, zkAppPrivateKey, zkAppInstance);
+  it('check Alice depositMessage status', async () => {
+    const zkAppInstance = new Challenge1(zkAppAddress);
+    await localDeploy(zkAppInstance, zkAppPrivateKey, deployerAccount);
+    await setEligibilityRoot(deployerAccount, zkAppPrivateKey, zkAppInstance);
 
-  //   await checkDeposit("Alice", deployerAccount, zkAppPrivateKey, zkAppInstance);
-  // });
+    await checkDeposit("Alice", deployerAccount, zkAppPrivateKey, zkAppInstance);
+  });
 
   it('Alice can depositMessage 1st time, BUT cannot depositMessage again', async () => {
     const zkAppInstance = new Challenge1(zkAppAddress);
@@ -116,7 +117,7 @@ describe('Challenge1', () => {
     await depositMessage(
       'Alice',
       BigInt(0),
-      Field(13),
+      Field(0),
       deployerAccount,
       zkAppPrivateKey,
       zkAppInstance
@@ -143,7 +144,7 @@ describe('Challenge1', () => {
         await depositMessage(
           'Alice',
           BigInt(0),
-          Field(13),
+          Field(0),
           deployerAccount,
           zkAppPrivateKey,
           zkAppInstance
@@ -154,24 +155,47 @@ describe('Challenge1', () => {
     }
   });
 
-  // it('check Bob eligibility - Bob is not in the list', async () => {
-  //   const zkAppInstance = new Challenge1(zkAppAddress);
-  //   await localDeploy(zkAppInstance, zkAppPrivateKey, deployerAccount);
-  //   await setEligibilityRoot(deployerAccount, zkAppPrivateKey, zkAppInstance);
-  //   try {
-  //     expect(
-  //       await checkEligibility(
-  //         'Bob',
-  //         BigInt(0),
-  //         deployerAccount,
-  //         zkAppPrivateKey,
-  //         zkAppInstance
-  //       )
-  //     ).toThrow();
-  //   } catch (e) {
-  //     console.log(e);
-  //   }
-  // });
+  it('check Bob eligibility - Bob is not in the list', async () => {
+    const zkAppInstance = new Challenge1(zkAppAddress);
+    await localDeploy(zkAppInstance, zkAppPrivateKey, deployerAccount);
+    await setEligibilityRoot(deployerAccount, zkAppPrivateKey, zkAppInstance);
+    try {
+      expect(
+        await checkEligibility(
+          'Bob',
+          BigInt(0),
+          deployerAccount,
+          zkAppPrivateKey,
+          zkAppInstance
+        )
+      ).toThrow();
+    } catch (e) {
+      console.log(e);
+    }
+  });
+
+  it('verify various messages', async () => {
+    // If flag 1 is true, then all other flags must be false
+    // If flag 2 is true, then flag 3 must also be true
+    // If flag 4 is true, then flags 5 and 6 must be false
+
+    const zkAppInstance = new Challenge1(zkAppAddress);
+    await localDeploy(zkAppInstance, zkAppPrivateKey, deployerAccount);
+
+    expect(zkAppInstance.verifyMessage(Field(0b000001))).toEqual(Bool(true)); // rule 1 is true
+    expect(zkAppInstance.verifyMessage(Field(0b000110))).toEqual(Bool(true)); // rule 2 is true
+    expect(zkAppInstance.verifyMessage(Field(0b001000))).toEqual(Bool(true)); // rule 3 is true
+
+    // flag 1, 2, 4 are false
+    expect(zkAppInstance.verifyMessage(Field(0b000000))).toEqual(Bool(true));
+    expect(zkAppInstance.verifyMessage(Field(0b110100))).toEqual(Bool(true));
+    expect(zkAppInstance.verifyMessage(Field(0b100100))).toEqual(Bool(true));
+
+    expect(zkAppInstance.verifyMessage(Field(0b100001))).toEqual(Bool(false)); // rule 1 is false
+    expect(zkAppInstance.verifyMessage(Field(0b100010))).toEqual(Bool(false)); // rule 2 is false
+    expect(zkAppInstance.verifyMessage(Field(0b111000))).toEqual(Bool(false)); // rule 3 is false
+  });
+    
 });
 
 async function setEligibilityRoot(
@@ -256,30 +280,4 @@ async function checkDeposit(
   await tx.prove();
   tx.sign([zkappKey]);
   await tx.send();
-}
-
-async function mint(
-  feePayer: any,
-  zkappKey: any,
-  contract: Challenge1
-) {
-  // const sig = Signature.create(
-  //   zkappKey,
-  //   UInt64.from(initialTokens)
-  //     .toFields()
-  //     .concat(contract.address.toFields())
-  // );
-
-  // let tx = await Mina.transaction(feePayer, () => {
-  //   AccountUpdate.fundNewAccount(feePayer);
-  //   contract.mint(
-  //     contract.address,
-  //     UInt64.from(initialTokens),
-  //     sig
-  //   );
-  //   contract.sign(zkappKey);
-  // });
-  // await tx.prove();
-  // tx.sign([zkappKey]);
-  // await tx.send();
 }

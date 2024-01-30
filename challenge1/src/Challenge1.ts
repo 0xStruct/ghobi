@@ -17,6 +17,7 @@ import {
   MerkleMapWitness,
   Provable,
   provablePure,
+  Gadgets,
 } from 'o1js';
 
 let initialBalance = 10_000_000_000;
@@ -111,7 +112,7 @@ export class Challenge1 extends SmartContract {
     // fetch the on-chain nullifierRoot
     let nullifierRoot = this.nullifierRoot.getAndRequireEquals();
 
-    // compute the root after setting nullifier flag
+    // compute the root after setting nullifier f
     const [rootAfterDeposit, key] = nullifierWitness.computeRootAndKey(Field(1));
 
     // ensure this account has not been deposited before
@@ -124,9 +125,8 @@ export class Challenge1 extends SmartContract {
     this.nullifierRoot.set(rootAfterDeposit);
     
     // verify message
-    Provable.log("message:", message.toBits()[-6]);
-
-    //Provable.if(message.toBits()[-6] === Bool(true))
+    const verified = this.verifyMessage(message);
+    verified.assertTrue("message is not verified according to rule");
 
     // now emit event with the message
     this.emitEvent('depositMessage', {
@@ -137,8 +137,48 @@ export class Challenge1 extends SmartContract {
     // update contract state
     let totalMessages = this.totalMessages.getAndRequireEquals();
     let newTotalMessages = totalMessages.add(1);
-    console.log('mesage deposited');
+    Provable.log('message deposited', message);
     this.totalMessages.set(newTotalMessages);
+  }
+
+  verifyMessage(message: Field): Bool  {
+    // If flag 1 is true, then all other flags must be false
+    // If flag 2 is true, then flag 3 must also be true
+    // If flag 4 is true, then flags 5 and 6 must be false
+
+    const f1Mask = Field(1); // 000001
+    const f2Mask = Field(2); // 000010
+    const f3Mask = Field(4); // 000100
+    const f4Mask = Field(8); // 001000
+    const f5Mask = Field(16); // 010000
+    const f6Mask = Field(32); // 100000
+      
+    const f1Bit = Gadgets.and(message, f1Mask, 6);
+    const f2Bit = Gadgets.and(message, f2Mask, 6);
+    const f3Bit = Gadgets.and(message, f3Mask, 6);
+    const f4Bit = Gadgets.and(message, f4Mask, 6);
+    const f5Bit = Gadgets.and(message, f5Mask, 6);
+    const f6Bit = Gadgets.and(message, f6Mask, 6);
+  
+    const f1: Bool = f1Bit.equals(f1Mask);
+    const f2: Bool = f2Bit.equals(f2Mask);
+    const f3: Bool = f3Bit.equals(f3Mask);
+    const f4: Bool = f4Bit.equals(f4Mask);
+    const f5: Bool = f5Bit.equals(f5Mask);
+    const f6: Bool = f6Bit.equals(f6Mask);
+
+    // rule 1: If flag 1 is true, then all other flags must be false 
+    const rule1 = (f1.not()).or(f1.and(f2.or(f3).or(f4).or(f5).or(f6).not()));
+
+    // rule 2: If flag 2 is true, then flag 3 must also be true
+    const rule2 = (f2.not()).or(f2.and(f3));
+
+    // rule 3: If flag 4 is true, then flags 5 and 6 must be false
+    const rule3 = (f4.not()).or(f4.and(f5.or(f6).not()));
+
+    const verified = rule1.and(rule2).and(rule3);
+
+    return verified;
     
   }
 }
