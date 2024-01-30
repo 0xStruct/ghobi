@@ -28,4 +28,13 @@ Total of 6 tests are written
 @method `checkEligibilty` throws Error if an address is not part of `eligibilityRoot` via Merkle Tree
 @method `checkDeposit` throws Error if an address has already deposited as tracked in `nullifierRoot` via Merkle Map
 
+@method `setEligibilityRoot` is used to set `eligibilityRoot` contract state after adding new addresses in the Merkle Tree
+
+```
+// EligibilityTree is a MerkleTree
+
+EligibilityTree.setLeaf(BigInt(0), alice.hash());
+EligibilityTree.getRoot();
+```
+
 `verifyMessage` leverages bitwise `AND` gadget and `Bool` methods
