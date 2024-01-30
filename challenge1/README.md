@@ -12,12 +12,12 @@ npm run test
 ## Test coverage
 
 Total of 6 tests are written
-    ✓ deploys the `Challenge1` smart contract and setEligibilityRoot (19362 ms)
-    ✓ check Alice is in the eligibility tree (12636 ms)
-    ✓ check Alice depositMessage status (16053 ms)
-    ✓ Alice can depositMessage 1st time, BUT cannot depositMessage again (19774 ms)
-    ✓ check Bob eligibility - Bob is not in the list (11852 ms)
-    ✓ verify various messages (11697 ms)
+- ✓ deploys the `Challenge1` smart contract and setEligibilityRoot (19362 ms)
+- ✓ check Alice is in the eligibility tree (12636 ms)
+- ✓ check Alice depositMessage status (16053 ms)
+- ✓ Alice can depositMessage 1st time, BUT cannot depositMessage again (19774 ms)
+- ✓ check Bob eligibility - Bob is not in the list (11852 ms)
+- ✓ verify various messages (11697 ms)
 
 ## Code explanation
 
