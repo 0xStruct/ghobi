@@ -1,4 +1,4 @@
-import { Bool, Character, Field, Provable, Struct } from "o1js";
+import { Bool, Character, Field, Provable, PublicKey, Struct, UInt64 } from "o1js";
 
 // message
 export class Message extends Struct({
@@ -38,3 +38,15 @@ export class Agent extends Struct({
     return new Bool(true);
   }
 }
+
+export class AgentTx extends Struct({
+  blockHeigh: UInt64,
+  sender: PublicKey,
+  nonce: UInt64,
+}) {}
+
+export class MessageProofPublicInput extends Struct({
+  securityCodeHash: Field,
+}) {}
+
+export class MessageProofPublicOputput extends Struct({}) {}

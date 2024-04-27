@@ -1,15 +1,40 @@
 import { TestingAppChain } from "@proto-kit/sdk";
-import { PrivateKey, Field, Poseidon, Character } from "o1js";
-import { SpyManager } from "../src/spy_manager";
+import { PrivateKey, Field, Poseidon, Character, UInt64 } from "o1js";
+import { SpyManager, SpyManagerPrivate, MessageProof, MessageProofProgram, proveMessage } from "../src/spy_manager";
 import { log } from "@proto-kit/common";
-import { UInt64 } from "@proto-kit/library";
-import { Message, Agent } from "../src/spy_manager/structs";
+import { Message, MessageProofPublicInput, MessageProofPublicOputput, Agent } from "../src/spy_manager/structs";
+import { Pickles } from 'o1js/dist/node/snarky';
+import { dummyBase64Proof } from 'o1js/dist/node/lib/proof_system';
 
 log.setLevel("ERROR");
 
+export async function dummyProof<I, O, P>(
+  publicOutput: O,
+  ProofType: new ({
+    proof,
+    publicInput,
+    publicOutput,
+    maxProofsVerified,
+  }: {
+    proof: unknown;
+    publicInput: I;
+    publicOutput: any;
+    maxProofsVerified: 0 | 2 | 1;
+  }) => P,
+  publicInput: I
+): Promise<P> {
+  const [, proof] = Pickles.proofOfBase64(await dummyBase64Proof(), 2);
+  return new ProofType({
+    proof: proof,
+    maxProofsVerified: 2,
+    publicInput,
+    publicOutput,
+  });
+}
+
 describe("spyManager", () => {
   let appChain = TestingAppChain.fromRuntime({
-    SpyManager,
+    SpyManagerPrivate,
   });
   let spyManager: SpyManager;
   let get_chars = (str: string) => {
@@ -48,13 +73,13 @@ describe("spyManager", () => {
         Balances: {
           totalSupply: UInt64.from(10000),
         },
-        SpyManager: {},
+        SpyManagerPrivate: {},
       },
     });
     await appChain.start();
     appChain.setSigner(signerPrivateKey);
 
-    spyManager = appChain.runtime.resolve("SpyManager");
+    spyManager = appChain.runtime.resolve("SpyManagerPrivate");
 
     // add agent
     const tx = await appChain.transaction(signer, () => {
@@ -64,7 +89,7 @@ describe("spyManager", () => {
     await tx.send();
 
     const block = await appChain.produceBlock();
-    const agent_ = await appChain.query.runtime.SpyManager.agents.get(
+    const agent_ = await appChain.query.runtime.SpyManagerPrivate.agents.get(
       agent1.agentId
     );
 
@@ -73,7 +98,7 @@ describe("spyManager", () => {
   });
 
   it("receiveMessage from agent1 (added)... should succeed", async () => {
-    const agent = await appChain.query.runtime.SpyManager.agents.get(
+    const agent = await appChain.query.runtime.SpyManagerPrivate.agents.get(
       agent1.agentId
     );
 
@@ -84,14 +109,20 @@ describe("spyManager", () => {
       securityCode: get_chars("aa"),
     });
 
+    const publicInput = new MessageProofPublicInput({
+      securityCodeHash: Poseidon.hash(msg.securityCode.map((char) => char.toField())),
+    });
+    const publicOutput = proveMessage(publicInput, msg);
+    const proof = await dummyProof(publicOutput, MessageProof, publicInput);
+
     const tx = await appChain.transaction(signer, () => {
-      spyManager.receiveMessage(msg);
+      spyManager.receiveMessage(msg, proof);
     });
     await tx.sign();
     await tx.send();
 
     const block = await appChain.produceBlock();
-    const agent_ = await appChain.query.runtime.SpyManager.agents.get(
+    const agent_ = await appChain.query.runtime.SpyManagerPrivate.agents.get(
       agent1.agentId
     );
 
@@ -107,8 +138,14 @@ describe("spyManager", () => {
       securityCode: get_chars("zz"),
     });
 
+    const publicInput = new MessageProofPublicInput({
+      securityCodeHash: Poseidon.hash(msg.securityCode.map((char) => char.toField())),
+    });
+    const publicOutput = proveMessage(publicInput, msg);
+    const proof = await dummyProof(publicOutput, MessageProof, publicInput);
+
     const tx = await appChain.transaction(signer, () => {
-      spyManager.receiveMessage(msg);
+      spyManager.receiveMessage(msg, proof);
     });
     await tx.sign();
     await tx.send();
@@ -116,7 +153,7 @@ describe("spyManager", () => {
     const block = await appChain.produceBlock();
     expect(block?.transactions[0].status.toBoolean()).toBe(false);
 
-    const agent_ = await appChain.query.runtime.SpyManager.agents.get(
+    const agent_ = await appChain.query.runtime.SpyManagerPrivate.agents.get(
       agent1.agentId
     );
     expect(agent_?.lastMsgNumber.toBigInt()).not.toBe(msg.msgNumber.toBigInt());
@@ -130,8 +167,14 @@ describe("spyManager", () => {
       securityCode: get_chars("bb"),
     });
 
+    const publicInput = new MessageProofPublicInput({
+      securityCodeHash: Poseidon.hash(msg.securityCode.map((char) => char.toField())),
+    });
+    const publicOutput = proveMessage(publicInput, msg);
+    const proof = await dummyProof(publicOutput, MessageProof, publicInput);
+
     const tx = await appChain.transaction(signer, () => {
-      spyManager.receiveMessage(msg);
+      spyManager.receiveMessage(msg, proof);
     });
     await tx.sign();
     await tx.send();
@@ -139,7 +182,7 @@ describe("spyManager", () => {
     const block = await appChain.produceBlock();
     expect(block?.transactions[0].status.toBoolean()).toBe(false);
 
-    const agent_ = await appChain.query.runtime.SpyManager.agents.get(
+    const agent_ = await appChain.query.runtime.SpyManagerPrivate.agents.get(
       agent2.agentId
     );
     expect(agent_).toBeUndefined();
@@ -152,8 +195,15 @@ describe("spyManager", () => {
       twelveChars: get_chars("abcdefghijkl"), // 12 chars
       securityCode: get_chars("aa"),
     });
+
+    const publicInput = new MessageProofPublicInput({
+      securityCodeHash: Poseidon.hash(msg.securityCode.map((char) => char.toField())),
+    });
+    const publicOutput = proveMessage(publicInput, msg);
+    const proof = await dummyProof(publicOutput, MessageProof, publicInput);
+
     const tx = await appChain.transaction(signer, () => {
-      spyManager.receiveMessage(msg);
+      spyManager.receiveMessage(msg, proof);
     });
     await tx.sign();
     await tx.send();
@@ -161,7 +211,7 @@ describe("spyManager", () => {
     const block = await appChain.produceBlock();
     expect(block?.transactions[0].status.toBoolean()).toBe(false);
 
-    const agent_ = await appChain.query.runtime.SpyManager.agents.get(
+    const agent_ = await appChain.query.runtime.SpyManagerPrivate.agents.get(
       agent1.agentId
     );
     expect(agent_?.lastMsgNumber.toBigInt()).not.toBe(msg.msgNumber.toBigInt());
@@ -175,9 +225,15 @@ describe("spyManager", () => {
       securityCode: get_chars("aa"),
     });
 
+    const publicInput = new MessageProofPublicInput({
+      securityCodeHash: Poseidon.hash(msg.securityCode.map((char) => char.toField())),
+    });
+    const publicOutput = proveMessage(publicInput, msg);
+    const proof = await dummyProof(publicOutput, MessageProof, publicInput);
+
     await expect(async () => {
       const tx = await appChain.transaction(signer, () => {
-        spyManager.receiveMessage(msg);
+        spyManager.receiveMessage(msg, proof);
       });
       await tx.sign();
       await tx.send();
@@ -185,7 +241,7 @@ describe("spyManager", () => {
       const block = await appChain.produceBlock();
       expect(block?.transactions[0].status.toBoolean()).toBe(false);
 
-      const agent_ = await appChain.query.runtime.SpyManager.agents.get(
+      const agent_ = await appChain.query.runtime.SpyManagerPrivate.agents.get(
         agent1.agentId
       );
       expect(agent_?.lastMsgNumber.toBigInt()).not.toBe(

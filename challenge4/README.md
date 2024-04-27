@@ -32,8 +32,10 @@ pnpm install
 pnpm run test --filter=chain -- --watchAll
 ```
 
-## Privacy concerns
+## Privacy concerns (addressed in Challenge4)
 
-Currently, security codes and messages are open for everyone to see inside mempool.
+~~Currently, security codes and messages are open for everyone to see inside mempool.~~
 
-Off-chain proofs could be used to keep security codes and messages private before submitting the proofs on-chain.
+~~Off-chain proofs could be used to keep security codes and messages private before submitting the proofs on-chain.~~
+
+[x] `MessageProofProgram` is used to generate `MessageProof` to keep `securityCode` private.
