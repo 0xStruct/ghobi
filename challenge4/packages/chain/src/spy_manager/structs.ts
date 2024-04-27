@@ -40,7 +40,7 @@ export class Agent extends Struct({
 }
 
 export class AgentTx extends Struct({
-  blockHeigh: UInt64,
+  blockHeight: UInt64,
   sender: PublicKey,
   nonce: UInt64,
 }) {}
@@ -49,4 +49,7 @@ export class MessageProofPublicInput extends Struct({
   securityCodeHash: Field,
 }) {}
 
-export class MessageProofPublicOputput extends Struct({}) {}
+export class MessageProofPublicOputput extends Struct({
+  agentId: Field,
+  msgNumber: Field,
+}) {}

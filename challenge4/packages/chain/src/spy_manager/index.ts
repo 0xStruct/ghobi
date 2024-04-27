@@ -17,7 +17,7 @@ export const proveMessage = (
   Provable.log("securityCode check", messageSecurityCodeHash, publicInput.securityCodeHash);
   assert(publicInput.securityCodeHash.equals(messageSecurityCodeHash));
 
-  return new MessageProofPublicOputput({});
+  return new MessageProofPublicOputput({ agentId: message.agentId, msgNumber: message.msgNumber });
 };
 
 export const MessageProofProgram = Experimental.ZkProgram({
@@ -83,7 +83,7 @@ export class SpyManager extends RuntimeModule {
 
 @runtimeModule()
 export class SpyManagerPrivate extends SpyManager {
-  @state() public agentInfo = StateMap.from<Field, AgentTx>(
+  @state() public agentTx = StateMap.from<Field, AgentTx>(
     Field,
     AgentTx
   );
@@ -95,13 +95,13 @@ export class SpyManagerPrivate extends SpyManager {
   ) {
     super.receiveMessage(message, messageProof);
 
-    // save agentInfo
-    let agentInfo = this.agentInfo.get(message.agentId).value;
+    // save agentTx
+    let agentTx = this.agentTx.get(message.agentId).value;
 
-    agentInfo.blockHeigh = this.network.block.height;
-    agentInfo.nonce = agentInfo.nonce.add(1);
-    agentInfo.sender = this.transaction.sender.value;
+    agentTx.blockHeight = this.network.block.height;
+    agentTx.nonce = agentTx.nonce.add(1);
+    agentTx.sender = this.transaction.sender.value;
 
-    this.agentInfo.set(message.agentId, agentInfo);
+    this.agentTx.set(message.agentId, agentTx);
   }
 }

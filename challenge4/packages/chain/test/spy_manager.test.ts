@@ -1,10 +1,21 @@
 import { TestingAppChain } from "@proto-kit/sdk";
 import { PrivateKey, Field, Poseidon, Character, UInt64 } from "o1js";
-import { SpyManager, SpyManagerPrivate, MessageProof, MessageProofProgram, proveMessage } from "../src/spy_manager";
+import {
+  SpyManager,
+  SpyManagerPrivate,
+  MessageProof,
+  MessageProofProgram,
+  proveMessage,
+} from "../src/spy_manager";
 import { log } from "@proto-kit/common";
-import { Message, MessageProofPublicInput, MessageProofPublicOputput, Agent } from "../src/spy_manager/structs";
-import { Pickles } from 'o1js/dist/node/snarky';
-import { dummyBase64Proof } from 'o1js/dist/node/lib/proof_system';
+import {
+  Message,
+  MessageProofPublicInput,
+  MessageProofPublicOputput,
+  Agent,
+} from "../src/spy_manager/structs";
+import { Pickles } from "o1js/dist/node/snarky";
+import { dummyBase64Proof } from "o1js/dist/node/lib/proof_system";
 
 log.setLevel("ERROR");
 
@@ -97,7 +108,7 @@ describe("spyManager", () => {
     expect(agent_?.agentId.toBigInt()).toBe(agent1.agentId.toBigInt());
   });
 
-  it("receiveMessage from agent1 (added)... should succeed", async () => {
+  it("receiveMessage from agent1 (added) and query agentTx as well... should succeed", async () => {
     const agent = await appChain.query.runtime.SpyManagerPrivate.agents.get(
       agent1.agentId
     );
@@ -110,7 +121,9 @@ describe("spyManager", () => {
     });
 
     const publicInput = new MessageProofPublicInput({
-      securityCodeHash: Poseidon.hash(msg.securityCode.map((char) => char.toField())),
+      securityCodeHash: Poseidon.hash(
+        msg.securityCode.map((char) => char.toField())
+      ),
     });
     const publicOutput = proveMessage(publicInput, msg);
     const proof = await dummyProof(publicOutput, MessageProof, publicInput);
@@ -128,6 +141,17 @@ describe("spyManager", () => {
 
     expect(block?.transactions[0].status.toBoolean()).toBe(true);
     expect(agent_?.lastMsgNumber.toBigInt()).toBe(msg.msgNumber.toBigInt());
+
+    const agentTx = await appChain.query.runtime.SpyManagerPrivate.agentTx.get(
+      msg.agentId
+    );
+
+    expect(agentTx?.blockHeight.toBigInt()).toBe(block?.height.toBigInt());
+    expect(agentTx?.sender.toBase58()).toBe(signer.toBase58());
+    expect(agentTx?.sender.toBase58()).toBe(
+      tx.transaction?.sender.toBase58()
+    );
+    expect(agentTx?.nonce.toBigInt()).toBe(tx.transaction?.nonce.toBigInt());
   });
 
   it("receiveMessage from agent1 (added) with wrong securityCode... should fail", async () => {
@@ -139,7 +163,9 @@ describe("spyManager", () => {
     });
 
     const publicInput = new MessageProofPublicInput({
-      securityCodeHash: Poseidon.hash(msg.securityCode.map((char) => char.toField())),
+      securityCodeHash: Poseidon.hash(
+        msg.securityCode.map((char) => char.toField())
+      ),
     });
     const publicOutput = proveMessage(publicInput, msg);
     const proof = await dummyProof(publicOutput, MessageProof, publicInput);
@@ -168,7 +194,9 @@ describe("spyManager", () => {
     });
 
     const publicInput = new MessageProofPublicInput({
-      securityCodeHash: Poseidon.hash(msg.securityCode.map((char) => char.toField())),
+      securityCodeHash: Poseidon.hash(
+        msg.securityCode.map((char) => char.toField())
+      ),
     });
     const publicOutput = proveMessage(publicInput, msg);
     const proof = await dummyProof(publicOutput, MessageProof, publicInput);
@@ -197,7 +225,9 @@ describe("spyManager", () => {
     });
 
     const publicInput = new MessageProofPublicInput({
-      securityCodeHash: Poseidon.hash(msg.securityCode.map((char) => char.toField())),
+      securityCodeHash: Poseidon.hash(
+        msg.securityCode.map((char) => char.toField())
+      ),
     });
     const publicOutput = proveMessage(publicInput, msg);
     const proof = await dummyProof(publicOutput, MessageProof, publicInput);
@@ -226,7 +256,9 @@ describe("spyManager", () => {
     });
 
     const publicInput = new MessageProofPublicInput({
-      securityCodeHash: Poseidon.hash(msg.securityCode.map((char) => char.toField())),
+      securityCodeHash: Poseidon.hash(
+        msg.securityCode.map((char) => char.toField())
+      ),
     });
     const publicOutput = proveMessage(publicInput, msg);
     const proof = await dummyProof(publicOutput, MessageProof, publicInput);
